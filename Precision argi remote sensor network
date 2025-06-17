@@ -1,0 +1,156 @@
+# ====================
+# 传感器节点代码 (MicroPython)
+# ====================
+from machine import Pin, ADC, I2C
+import time
+import network
+import urequests
+import ujson
+
+# 传感器驱动
+class SoilSensor:
+    def __init__(self, pin):
+        self.adc = ADC(Pin(pin))
+        self.adc.atten(ADC.ATTN_11DB)
+        
+    def read_moisture(self):
+        raw = self.adc.read()
+        return (4095 - raw) / 4095 * 100  # 百分比湿度
+    
+class NPKSensor:
+    def __init__(self, i2c_bus):
+        self.i2c = I2C(i2c_bus)
+        self.addr = 0x48
+        
+    def read_npk(self):
+        data = self.i2c.readfrom(self.addr, 5)
+        return {
+            'N': data[0] * 0.1,
+            'P': data[1] * 0.1,
+            'K': data[2] * 0.1
+        }
+
+# LoRaWAN通信模块
+class LoRaTransceiver:
+    def __init__(self, freq=868000000):
+        self.lora = network.LoRa(
+            mode=network.LoRa.LORAWAN,
+            region=network.LoRa.EU868
+        )
+        self.app_eui = '70B3D57ED003EBD7'
+        self.app_key = 'A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6'
+        
+    def connect(self):
+        self.lora.join(activation=LoRa.OTAA, auth=(self.app_eui, self.app_key))
+        while not self.lora.has_joined():
+            time.sleep(1)
+            
+    def send_data(self, data):
+        socket = socket.socket(socket.AF_LORA, socket.SOCK_RAW)
+        socket.setsockopt(socket.SOL_LORA, socket.SO_DR, 5)
+        socket.send(ujson.dumps(data))
+
+# 主程序循环
+def main():
+    # 初始化硬件
+    soil = SoilSensor(pin=32)
+    npk = NPKSensor(i2c_bus=0)
+    lora = LoRaTransceiver()
+    
+    lora.connect()
+    
+    while True:
+        data = {
+            'timestamp': time.time(),
+            'moisture': soil.read_moisture(),
+            'npk': npk.read_npk(),
+            'location': (GPS_LAT, GPS_LON)
+        }
+        lora.send_data(data)
+        time.sleep(300)  # 每5分钟发送
+
+# ====================
+# 数据分析后端 (Python)
+# ====================
+from flask import Flask
+from flask_socketio import SocketIO
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+import joblib
+
+app = Flask(__name__)
+socketio = SocketIO(app)
+
+# 实时数据处理
+@socketio.on('sensor_data')
+def handle_data(data):
+    # 存储到时序数据库
+    pd.DataFrame([data]).to_sql('sensor_readings', con=DB_ENGINE, if_exists='append')
+    
+    # 实时预警
+    if data['moisture'] < 30:
+        alert = {'type': 'irrigation', 'level': 'urgent'}
+        socketio.emit('alert', alert)
+    
+    # 更新机器学习模型
+    update_ml_model()
+
+# 机器学习预测模型
+class CropYieldPredictor:
+    def __init__(self):
+        self.model = RandomForestRegressor(n_estimators=100)
+        self.features = ['moisture', 'N', 'P', 'K', 'temp', 'humidity']
+        self.target = 'yield'
+        
+    def train(self, data):
+        X = data[self.features]
+        y = data[self.target]
+        self.model.fit(X, y)
+        joblib.dump(self.model, 'yield_model.pkl')
+        
+    def predict(self, inputs):
+        return self.model.predict(pd.DataFrame([inputs]))
+
+# 自动灌溉决策
+def irrigation_decision(data):
+    model = joblib.load('yield_model.pkl')
+    current_yield = model.predict(data)
+    
+    # 获取天气预报
+    weather = get_weather_forecast()
+    
+    # 优化算法
+    def water_optimizer(x):
+        """x: 灌溉水量"""
+        predicted = model.predict(data.update({'moisture': data['moisture'] + x}))
+        cost = x * WATER_COST - predicted * CROP_PRICE
+        return cost
+    
+    result = minimize(water_optimizer, x0=0, bounds=[(0, 100)])
+    return result.x
+
+# 三维可视化
+def visualize_3d_field():
+    from mpl_toolkits.mplot3d import Axes3D
+    
+    data = pd.read_sql('SELECT * FROM sensor_readings', DB_ENGINE)
+    fig = plt.figure(figsize=(12,8))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    sc = ax.scatter(
+        data['longitude'], 
+        data['latitude'],
+        data['moisture'],
+        c=data['N'],
+        cmap='viridis'
+    )
+    
+    plt.colorbar(sc, label='Nitrogen Level')
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.set_zlabel('Soil Moisture (%)')
+    plt.title('3D Field Condition Map')
+    plt.show()
+
+if __name__ == "__main__":
+    socketio.run(app, host='0.0.0.0', port=5000)
