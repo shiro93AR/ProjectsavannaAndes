@@ -106,4 +106,4 @@ Core framework uses **MIT License**.
 
 ---
 > "Connecting complexity, Powering Progress" — Project Motto  
-> **Join Us**: nexusdynamicsglobal@gmail.com| [Discord Community](https://discord.gg/nexus-dynamics)
+> **Join Us**: nexusdynamicsglobal@gmail.com| [Discord Community](https://discord.gg/MqSrkPPJ)
