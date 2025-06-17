@@ -1,0 +1,10 @@
+def decision_tree_policy(data):
+    if data['moisture'] < 30:
+        if data['weather']['precip_prob'] < 20:
+            return {'action': 'irrigate', 'duration': 30}
+        else:
+            return {'action': 'delay', 'reason': 'rain_forecast'}
+    elif data['N'] < 15:
+        return {'action': 'fertilize', 'type': 'nitrogen'}
+    else:
+        return {'action': 'monitor'}
