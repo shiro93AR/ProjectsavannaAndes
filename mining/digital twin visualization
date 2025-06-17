@@ -1,0 +1,22 @@
+def plot_supply_network(df):
+    import folium
+    m = folium.Map(location=[-15, 20], zoom_start=6)
+    
+    for _, row in df.iterrows():
+        folium.Marker(
+            location=row['from_loc'],
+            icon=folium.Icon(color='red')
+        ).add_to(m)
+        
+        folium.Marker(
+            location=row['to_loc'],
+            icon=folium.Icon(color='blue')
+        ).add_to(m)
+        
+        folium.PolyLine(
+            [row['from_loc'], row['to_loc']],
+            color='green' if row['mode']=='rail' else 'orange',
+            weight=row['amount']/100
+        ).add_to(m)
+    
+    return m
