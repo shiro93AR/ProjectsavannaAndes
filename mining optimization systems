@@ -1,0 +1,115 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from ortools.linear_solver import pywraplp
+from geopy.distance import geodesic
+import simpy
+
+# ====================
+# 矿业物流优化模型
+# ====================
+class MiningSupplyChainOptimizer:
+    def __init__(self, mines, plants, transport_modes):
+        self.solver = pywraplp.Solver.CreateSolver('SCIP')
+        self.mines = mines  # 矿山数据 [{id, location, capacity, cost}]
+        self.plants = plants  # 冶炼厂数据 [{id, location, demand, process_cost}]
+        self.transport_modes = transport_modes  # 运输方式 [{type, cost_per_km, speed, carbon_factor}]
+        
+        # 创建决策变量
+        self.shipments = {}
+        for m in mines:
+            for p in plants:
+                for t in transport_modes:
+                    var_name = f'ship_{m["id"]}_{p["id"]}_{t["type"]}'
+                    self.shipments[(m['id'], p['id'], t['type'])] = self.solver.NumVar(
+                        0, m['capacity'], var_name)
+        
+        # 设置约束
+        self._add_constraints()
+    
+    def _add_constraints(self):
+        # 矿山产能约束
+        for m in self.mines:
+            total = sum(self.shipments[(m['id'], p['id'], t['type'])] 
+                       for p in self.plants for t in self.transport_modes)
+            self.solver.Add(total <= m['capacity'])
+            
+        # 冶炼厂需求约束
+        for p in self.plants:
+            total = sum(self.shipments[(m['id'], p['id'], t['type'])] 
+                       for m in self.mines for t in self.transport_modes)
+            self.solver.Add(total >= p['demand'])
+    
+    def optimize(self, carbon_cap=None):
+        # 目标函数: 最小化总成本(开采+运输+处理)
+        objective = self.solver.Objective()
+        for (m_id, p_id, t_type), var in self.shipments.items():
+            mine = next(m for m in self.mines if m['id'] == m_id)
+            plant = next(p for p in self.plants if p['id'] == p_id)
+            trans = next(t for t in self.transport_modes if t['type'] == t_type)
+            
+            # 计算运输距离
+            dist = geodesic(mine['location'], plant['location']).km
+            cost = (mine['cost'] + 
+                   trans['cost_per_km'] * dist +
+                   plant['process_cost'])
+            
+            objective.SetCoefficient(var, cost)
+        
+        if carbon_cap:
+            # 碳排放约束
+            carbon = self.solver.Constraint(0, carbon_cap)
+            for (m_id, p_id, t_type), var in self.shipments.items():
+                trans = next(t for t in self.transport_modes if t['type'] == t_type)
+                dist = geodesic(
+                    next(m['location'] for m in self.mines if m['id'] == m_id),
+                    next(p['location'] for p in self.plants if p['id'] == p_id)
+                ).km
+                carbon_coeff = dist * trans['carbon_factor']
+                carbon.SetCoefficient(var, carbon_coeff)
+        
+        objective.SetMinimization()
+        status = self.solver.Solve()
+        
+        if status == pywraplp.Solver.OPTIMAL:
+            return self._prepare_results()
+        else:
+            raise Exception("No optimal solution found")
+    
+    def _prepare_results(self):
+        results = []
+        for (m_id, p_id, t_type), var in self.shipments.items():
+            if var.solution_value() > 0:
+                results.append({
+                    'from': m_id,
+                    'to': p_id,
+                    'mode': t_type,
+                    'amount': var.solution_value(),
+                    'cost': var.solution_value() * var.objective_coefficient()
+                })
+        return pd.DataFrame(results)
+
+# 示例使用
+if __name__ == "__main__":
+    mines = [
+        {'id': 'M1', 'location': (-12.45, 18.32), 'capacity': 500, 'cost': 80},
+        {'id': 'M2', 'location': (-14.22, 20.15), 'capacity': 800, 'cost': 75}
+    ]
+    
+    plants = [
+        {'id': 'P1', 'location': (-13.10, 19.50), 'demand': 1000, 'process_cost': 20}
+    ]
+    
+    transport = [
+        {'type': 'truck', 'cost_per_km': 0.3, 'speed': 60, 'carbon_factor': 0.25},
+        {'type': 'rail', 'cost_per_km': 0.15, 'speed': 40, 'carbon_factor': 0.12}
+    ]
+    
+    optimizer = MiningSupplyChainOptimizer(mines, plants, transport)
+    result = optimizer.optimize(carbon_cap=2000)
+    
+    # 可视化优化结果
+    fig, ax = plt.subplots(figsize=(10,6))
+    result.groupby('mode')['amount'].sum().plot.pie(ax=ax, autopct='%1.1f%%')
+    plt.title('Transport Mode Distribution')
+    plt.show()
