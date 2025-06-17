@@ -1,0 +1,245 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import odeint
+from mesa import Model, Agent
+from mesa.time import RandomActivation
+from mesa.space import MultiGrid
+from mesa.datacollection import DataCollector
+import networkx as nx
+import pandas as pd
+
+# ====================
+# 1. 经典SEIR微分方程模型
+# ====================
+def seir_model(y, t, params):
+    """
+    SEIR模型微分方程
+    S: 易感者
+    E: 潜伏期
+    I: 感染者
+    R: 康复者
+    """
+    S, E, I, R = y
+    N = S + E + I + R
+    β, σ, γ = params
+    
+    dSdt = -β * S * I / N
+    dEdt = β * S * I / N - σ * E
+    dIdt = σ * E - γ * I
+    dRdt = γ * I
+    
+    return dSdt, dEdt, dIdt, dRdt
+
+# 参数设置
+params = (0.3, 1/5.2, 1/14)  # (传播率, 潜伏期倒数, 恢复率)
+initial_conditions = [990, 10, 0, 0]  # S, E, I, R
+t = np.linspace(0, 180, 180)  # 模拟180天
+
+# 求解微分方程
+solution = odeint(seir_model, initial_conditions, t, args=(params,))
+S, E, I, R = solution.T
+
+# 可视化结果
+plt.figure(figsize=(12,6))
+plt.plot(t, S, label='Susceptible')
+plt.plot(t, E, label='Exposed')
+plt.plot(t, I, label='Infected')
+plt.plot(t, R, label='Recovered')
+plt.xlabel('Days')
+plt.ylabel('Population')
+plt.title('SEIR Model Simulation')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# ====================
+# 2. 基于代理的复杂网络模型
+# ====================
+class Person(Agent):
+    """个体代理"""
+    STATES = ['S', 'E', 'I', 'R']
+    
+    def __init__(self, unique_id, model):
+        super().__init__(unique_id, model)
+        self.state = 'S'  # 初始状态为易感者
+        self.infected_days = 0
+        self.connections = []  # 社交网络连接
+        
+    def move(self):
+        """随机移动"""
+        possible_steps = self.model.grid.get_neighborhood(
+            self.pos,
+            moore=True,
+            include_center=False
+        )
+        new_position = self.random.choice(possible_steps)
+        self.model.grid.move_agent(self, new_position)
+        
+    def interact(self):
+        """传播疾病"""
+        if self.state == 'I':
+            cellmates = self.model.grid.get_cell_list_contents([self.pos])
+            for other in cellmates:
+                if other.state == 'S' and self.random.random() < self.model.infection_prob:
+                    other.state = 'E'
+                    
+    def update_state(self):
+        """状态转换"""
+        if self.state == 'E':
+            # 潜伏期转感染期
+            if self.random.random() < 1/self.model.incubation_period:
+                self.state = 'I'
+        elif self.state == 'I':
+            self.infected_days += 1
+            # 感染期转康复期
+            if self.infected_days >= self.model.recovery_time:
+                self.state = 'R'
+
+    def step(self):
+        self.move()
+        self.interact()
+        self.update_state()
+
+class EpidemicModel(Model):
+    """传染病传播模型"""
+    def __init__(self, N=1000, width=50, height=50, infection_prob=0.03, 
+                 incubation_period=5, recovery_time=14):
+        self.num_agents = N
+        self.grid = MultiGrid(width, height, True)
+        self.schedule = RandomActivation(self)
+        self.infection_prob = infection_prob
+        self.incubation_period = incubation_period
+        self.recovery_time = recovery_time
+        
+        # 创建代理
+        for i in range(self.num_agents):
+            agent = Person(i, self)
+            self.schedule.add(agent)
+            x = self.random.randrange(self.grid.width)
+            y = self.random.randrange(self.grid.height)
+            self.grid.place_agent(agent, (x, y))
+            
+        # 创建社交网络
+        self.social_network = nx.watts_strogatz_graph(n=N, k=10, p=0.1)
+        
+        # 初始化感染者
+        patient_zero = self.random.choice(self.schedule.agents)
+        patient_zero.state = 'I'
+        
+        # 数据收集
+        self.datacollector = DataCollector(
+            agent_reporters={"State": "state"},
+            model_reporters={
+                "Susceptible": lambda m: sum(1 for a in m.schedule.agents if a.state == 'S'),
+                "Exposed": lambda m: sum(1 for a in m.schedule.agents if a.state == 'E'),
+                "Infected": lambda m: sum(1 for a in m.schedule.agents if a.state == 'I'),
+                "Recovered": lambda m: sum(1 for a in m.schedule.agents if a.state == 'R')
+            }
+        )
+
+    def step(self):
+        self.datacollector.collect(self)
+        self.schedule.step()
+
+# 运行模拟
+model = EpidemicModel(N=1000)
+for _ in range(100):  # 模拟100步
+    model.step()
+
+# 获取结果数据
+results = model.datacollector.get_model_vars_dataframe()
+
+# 可视化代理模型结果
+plt.figure(figsize=(12,6))
+plt.plot(results['Susceptible'], label='Susceptible')
+plt.plot(results['Exposed'], label='Exposed')
+plt.plot(results['Infected'], label='Infected')
+plt.plot(results['Recovered'], label='Recovered')
+plt.xlabel('Steps')
+plt.ylabel('Population')
+plt.title('Agent-Based Epidemic Spread')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# ====================
+# 3. 空间异质性扩展模型
+# ====================
+def spatial_heterogeneity_model():
+    # 创建地理网格
+    grid_size = 100
+    population_density = np.random.gamma(2, 2, (grid_size, grid_size))
+    
+    # 移动模式矩阵
+    mobility_matrix = np.zeros((grid_size**2, grid_size**2))
+    for i in range(grid_size**2):
+        for j in range(grid_size**2):
+            xi, yi = i//grid_size, i%grid_size
+            xj, yj = j//grid_size, j%grid_size
+            distance = np.sqrt((xi-xj)**2 + (yi-yj)**2)
+            mobility_matrix[i,j] = np.exp(-distance/10)
+    
+    # 使用元胞自动机更新规则
+    def update_cell(current_state, neighbor_states):
+        infection_pressure = sum(n > 0 for n in neighbor_states)
+        new_state = current_state
+        if current_state == 0:  # 易感
+            if infection_pressure > 2:
+                new_state = 1  # 感染
+        elif current_state == 1:  # 感染
+            new_state = 2  # 康复
+        return new_state
+    
+    # 初始化状态网格
+    state_grid = np.random.choice([0,1,2], size=(grid_size, grid_size), p=[0.99,0.01,0])
+    
+    # 模拟传播
+    for _ in range(100):
+        new_grid = state_grid.copy()
+        for i in range(grid_size):
+            for j in range(grid_size):
+                neighbors = state_grid[max(i-1,0):min(i+2,grid_size),
+                                      max(j-1,0):min(j+2,grid_size)]
+                new_grid[i,j] = update_cell(state_grid[i,j], neighbors)
+        state_grid = new_grid
+    
+    # 可视化空间分布
+    plt.figure(figsize=(10,8))
+    plt.imshow(state_grid, cmap='viridis', interpolation='nearest')
+    plt.title('Spatial Infection Distribution')
+    plt.colorbar(label='0:Susceptible, 1:Infected, 2:Recovered')
+    plt.show()
+
+spatial_heterogeneity_model()
+
+# ====================
+# 4. 干预措施分析模块
+# ====================
+def evaluate_interventions():
+    # 定义不同干预策略
+    strategies = {
+        'No Intervention': {'social_distancing': 0, 'vaccination': 0},
+        'Social Distancing': {'social_distancing': 0.6, 'vaccination': 0},
+        'Vaccination': {'social_distancing': 0, 'vaccination': 0.7},
+        'Combined': {'social_distancing': 0.4, 'vaccination': 0.5}
+    }
+    
+    # 模拟不同策略效果
+    results = {}
+    for name, params in strategies.items():
+        model = EpidemicModel(
+            infection_prob=0.03*(1-params['social_distancing']),
+            initial_vaccinated=int(1000*params['vaccination'])
+        )
+        for _ in range(100):
+            model.step()
+        results[name] = model.datacollector.get_model_vars_dataframe()
+    
+    # 比较峰值感染人数
+    peak_infections = {k: v['Infected'].max() for k,v in results.items()}
+    pd.DataFrame.from_dict(peak_infections, orient='index', columns=['Peak Infections']).plot.bar()
+    plt.title('Intervention Strategy Comparison')
+    plt.ylabel('Peak Infections')
+    plt.show()
+
+evaluate_interventions()
