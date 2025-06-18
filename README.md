@@ -6,6 +6,13 @@
 ## Project Overview
 Nexus Dynamics Global specializes in cutting-edge complex systems modeling technologies. Through quantum computing, multi-agent simulation, and AI optimization, we tackle global cross-domain challenges. This repository contains core modeling frameworks and demonstration applications, driving the transition from theory to policy implementation.
 
+Nexus Dynamics Global se especializa en tecnologías de vanguardia para el modelado de sistemas complejos. Mediante la computación cuántica, la simulación multiagente y la optimización con IA, abordamos desafíos globales interdisciplinarios. Este repositorio contiene marcos de modelado fundamentales y aplicaciones de demostración, que impulsan la transición de la teoría a la implementación de políticas.
+
+A Nexus Dynamics Global é especializada em tecnologias de ponta para modelagem de sistemas complexos. Por meio de computação quântica, simulação multiagente e otimização de IA, enfrentamos desafios globais entre domínios. Este repositório contém estruturas de modelagem essenciais e aplicações de demonstração, impulsionando a transição da teoria para a implementação de políticas.
+
+Nexus Dynamics Global inataalam katika teknolojia ya kisasa ya uundaji wa mifumo changamano. Kupitia kompyuta ya kiasi, uigaji wa mawakala wengi, na uboreshaji wa AI, tunakabiliana na changamoto za kimataifa za vikoa. Hazina hii ina mifumo msingi ya kielelezo na maombi ya maonyesho, inayoendesha mageuzi kutoka kwa nadharia hadi utekelezaji wa sera.
+
+
 ```mermaid
 graph LR
     A[Quantum Computing Core] --> B[Complex Systems Modeling]
@@ -96,13 +103,30 @@ We encourage interdisciplinary contributions:
 2. **Developers**: Optimize quantum-classical hybrid computing interfaces
 3. **Domain Experts**: Validate scenario datasets (healthcare/urban/ecology)
 
+Incentivamos contribuições interdisciplinares:
+1. **Especialistas em Modelagem**: Expandir a biblioteca de modelos (consulte `model_contribution.md`)
+2. **Desenvolvedores**: Otimizar interfaces de computação híbrida quântica-clássica
+3. **Especialistas em Domínio**: Validar conjuntos de dados de cenários (saúde/urbano/ecologia)
+
+Fomentamos las contribuciones interdisciplinarias:
+1. **Expertos en modelado**: Ampliar la biblioteca de modelos (véase `model_contribution.md`)
+2. **Desarrolladores**: Optimizar las interfaces de computación híbrida cuántico-clásica
+3. **Expertos en el dominio**: Validar conjuntos de datos de escenarios (salud/urbano/ecología)
+
+Tunahimiza michango ya taaluma mbalimbali:
+1. **Wataalamu wa Uundaji**: Panua maktaba ya muundo (angalia `model_contribution.md`)
+2. **Wasanidi**: Boresha miingiliano ya kompyuta mseto ya quantum-classical
+3. **Wataalamu wa Kikoa**: Thibitisha seti za data za matukio (huduma ya afya/mijini/ikolojia)
+
+
+
 **Key Branches**:
 - `main`: Stable production version
 - `quantum-dev`: Quantum algorithm experiments
 - `policy-integration`: Government application adaptations
 
 ## License
-Core framework uses **MIT License**. 
+Core framework uses Apache 2.0 Open Source License. Some quantum algorithm modules are patent-protected (see PATENTS.md). Policy application derivatives require Nexus Impact License. 
 
 ---
 > "Connecting complexity, Powering Progress" — Project Motto  
